@@ -81,8 +81,11 @@ Session.from_curl(open("copied.txt").read())      # paste "Copy as cURL" from de
 Session(base_url="https://x.com", headers={...})  # explicit
 ```
 
-`.get(path)` and `.post(path, json=...)` return parsed JSON. If your token
-rotates, a `401`/`403` triggers one re-pull from mitmweb and a retry.
+`.get(path)`, `.post(path, json=...)`, and the other common HTTP verb helpers
+return parsed JSON and raise `requests.HTTPError` for failed responses. If your
+token rotates, a `401` on an idempotent request triggers one re-pull from
+mitmweb and a retry. Non-idempotent requests are not retried unless you explicitly
+pass `refresh=True`.
 
 ## Capture backends
 

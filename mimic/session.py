@@ -13,6 +13,9 @@ from . import extract
 from .sources.mitm import Mitm
 
 
+_IDEMPOTENT_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "PUT", "DELETE"})
+
+
 class Session:
     """Base URL + reusable headers, with helpers that return parsed JSON.
 
@@ -48,17 +51,32 @@ class Session:
         return cls(base_url, headers)
 
     # ---- calls --------------------------------------------------------------
-    def request(self, method, path, json=None, params=None, refresh=True, **kw):
+    def request(self, method, path, json=None, params=None, refresh=None, **kw):
+        """Make a request and return its parsed body.
+
+        Failed responses raise ``requests.HTTPError``. A 401 refreshes captured
+        credentials and retries idempotent methods once. Pass ``refresh=True``
+        to explicitly allow one retry for a non-idempotent method such as POST.
+        """
+        method = method.upper()
         url = path if path.startswith("http") else f"{self.base_url}{path}"
         r = self._http.request(
             method, url, headers=self.headers, json=json, params=params, **kw
         )
-        if r.status_code in (401, 403) and refresh and self.host and self._mitm:
-            # token likely rotated — re-pull from mitm once and retry
-            self.headers = extract.session_headers(self._mitm.flows(), self.host)
-            return self.request(
-                method, path, json=json, params=params, refresh=False, **kw
-            )
+        should_refresh = refresh is True or (
+            refresh is None and method in _IDEMPOTENT_METHODS
+        )
+        if r.status_code == 401 and should_refresh and self.host and self._mitm:
+            # Retry only when mitmweb has a non-empty, changed credential set.
+            # Keeping the old headers avoids turning a refresh miss into an
+            # unauthenticated retry.
+            new_headers = extract.session_headers(self._mitm.flows(), self.host)
+            if new_headers and new_headers != self.headers:
+                self.headers = new_headers
+                return self.request(
+                    method, path, json=json, params=params, refresh=False, **kw
+                )
+        r.raise_for_status()
         return _parse(r)
 
     def get(self, path, **kw):
@@ -66,6 +84,21 @@ class Session:
 
     def post(self, path, json=None, **kw):
         return self.request("POST", path, json=json, **kw)
+
+    def put(self, path, json=None, **kw):
+        return self.request("PUT", path, json=json, **kw)
+
+    def patch(self, path, json=None, **kw):
+        return self.request("PATCH", path, json=json, **kw)
+
+    def delete(self, path, json=None, **kw):
+        return self.request("DELETE", path, json=json, **kw)
+
+    def head(self, path, **kw):
+        return self.request("HEAD", path, **kw)
+
+    def options(self, path, **kw):
+        return self.request("OPTIONS", path, **kw)
 
 
 class App(Session):
