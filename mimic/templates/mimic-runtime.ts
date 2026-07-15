@@ -1,6 +1,6 @@
 // The runtime every generated TypeScript client is built on — the TS parallel
 // of mimic's Python `Session`/`App`. `mimic gen --lang ts` writes this file next
-// to the generated client; the client imports { MimicClient } from "./mimic_client".
+// to the generated client; the client imports { MimicClient } from "./mimic-runtime".
 //
 //   npm i axios zod
 //
@@ -31,7 +31,7 @@ export interface MimicOptions {
   refresh?: () => Promise<Headers>;
 }
 
-export interface CallOptions<T> extends AxiosRequestConfig {
+export interface CallOptions<T> extends Omit<AxiosRequestConfig, "headers"> {
   /** Request body sent as JSON. */
   json?: unknown;
   /** Query parameters. */
@@ -43,6 +43,8 @@ export interface CallOptions<T> extends AxiosRequestConfig {
    * Defaults to allowing it only for idempotent methods.
    */
   refresh?: boolean;
+  /** Per-call headers, merged over (not replacing) the session's auth headers. */
+  headers?: Headers;
 }
 
 export class MimicClient {
@@ -77,7 +79,7 @@ export class MimicClient {
     path: string,
     opts: CallOptions<T> = {},
   ): Promise<T> {
-    const { json, params, schema, refresh, ...rest } = opts;
+    const { json, params, schema, refresh, headers, ...rest } = opts;
     method = method.toUpperCase();
     const url = path.startsWith("http") ? path : `${this.baseUrl}${path}`;
     const allowRefresh = refresh === true || (refresh === undefined && IDEMPOTENT.has(method));
@@ -86,7 +88,9 @@ export class MimicClient {
       const res = await this.http.request({
         method,
         url,
-        headers: this.headers,
+        // Merge per-call headers over the session's auth headers — never replace
+        // them, or a caller setting e.g. Content-Type would drop the token.
+        headers: { ...this.headers, ...headers },
         data: json,
         params,
         ...rest,
@@ -145,7 +149,10 @@ export function parseCurl(text: string): { baseUrl: string; headers: Headers } {
     if (t === "-H" || t === "--header") {
       const raw = tokens[++i] ?? "";
       const idx = raw.indexOf(":");
-      if (idx !== -1) headers[raw.slice(0, idx).trim()] = raw.slice(idx + 1).trim();
+      // Mirror Python's str.partition(":"): a header with no colon keeps its
+      // whole text as the key with an empty value.
+      if (idx === -1) headers[raw.trim()] = "";
+      else headers[raw.slice(0, idx).trim()] = raw.slice(idx + 1).trim();
     } else if (t.startsWith("http")) {
       url = t;
     }

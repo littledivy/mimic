@@ -74,11 +74,11 @@ Then `from hinge_client import Hinge; Hinge().get_recommendations()`.
 Prefer a typed client for a Node / React Native codebase? Add `--lang ts`:
 
 ```bash
-mimic gen prod-api.hingeaws.net --lang ts    # writes hinge_client.ts + mimic_client.ts
+mimic gen prod-api.hingeaws.net --lang ts    # writes hinge_client.ts + mimic-runtime.ts
 ```
 
 The AI writes an ergonomic client on top of a small `MimicClient` runtime
-(`mimic_client.ts`, dropped next to the client — commit both), with a
+(`mimic-runtime.ts`, dropped next to the client — commit both), with a
 [Zod](https://zod.dev) schema per endpoint so responses are validated and fully
 typed. Same capture, same chaining, same 401 re-auth model — just Axios + Zod
 instead of `requests`.

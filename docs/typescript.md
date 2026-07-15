@@ -8,7 +8,7 @@ client as the output.
 ```bash
 mimic gen prod-api.hingeaws.net --lang ts
 # wrote prod_api_client.ts
-# wrote ./mimic_client.ts  (runtime — commit it alongside the client)
+# wrote ./mimic-runtime.ts  (runtime — commit it alongside the client)
 ```
 
 Two files land next to each other:
@@ -16,7 +16,7 @@ Two files land next to each other:
 - **`<host>_client.ts`** — the generated client. One exported class that
   `extends MimicClient`, one Zod schema per endpoint, and a named async method
   per real action. You edit this like any other source file.
-- **`mimic_client.ts`** — the runtime, copied from mimic. The TS parallel of the
+- **`mimic-runtime.ts`** — the runtime, copied from mimic. The TS parallel of the
   Python `mimic.App` base class. It is regeneration-safe: if the file already
   exists it is left untouched, so local edits survive re-running `gen`.
 

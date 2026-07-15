@@ -1,7 +1,6 @@
 __pycache__/
 *_client.py
 *_client.ts
-!mimic/templates/mimic_client.ts
 *.egg-info/
 *.pyc
 build/

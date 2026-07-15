@@ -17,7 +17,7 @@ import sys
 # Runtime the generated client imports, per language. Python ships as an
 # installed module (`from mimic import App`); TypeScript ships as a template
 # file copied next to the generated client (`import { MimicClient }`).
-_RUNTIME_TEMPLATES = {"ts": "mimic_client.ts"}
+_RUNTIME_TEMPLATES = {"ts": "mimic-runtime.ts"}
 
 
 PROMPT_PY = """\
@@ -55,12 +55,14 @@ with their own account. Your job: turn it into a clean, typed client library.
 
 Rules:
 - Output ONE TypeScript file, nothing else. No prose, no markdown fences.
-- Import the runtime: `import {{ MimicClient, CallOptions }} from "./mimic_client";` \
+- Import the runtime: `import {{ MimicClient, CallOptions }} from "./mimic-runtime";` \
 and `import {{ z }} from "zod";`. The runtime file ships alongside this one — do \
 NOT redefine MimicClient.
-- Export one class that `extends MimicClient`. Do NOT hardcode tokens or \
-headers; the caller supplies them via `new Client({{ baseUrl, headers }})` or \
-`Client.fromCurl(...)`. Add a short usage comment at the top showing both.
+- Export one class that `extends MimicClient`. Do NOT add a custom constructor \
+(the base one, taking `{{ baseUrl, headers, refresh? }}`, must stay usable). Do \
+NOT hardcode tokens or headers; the caller supplies them via \
+`new Client({{ baseUrl, headers }})` or `Client.fromCurl(...)`. Add a short \
+usage comment at the top showing both.
 - For each real endpoint, declare a Zod schema for its response inferred from \
 the sample body (e.g. `const PostsSchema = z.object({{ ... }});`) and export an \
 inferred type (`export type Posts = z.infer<typeof PostsSchema>;`). Prefer \
@@ -153,5 +155,5 @@ def write_runtime(lang, out_dir):
 
 def _strip_fences(text):
     """AI generators sometimes wrap output in ```python / ```ts fences."""
-    m = re.search(r"```(?:python|py|typescript|ts)?\n(.*?)```", text, re.S)
+    m = re.search(r"```(?:python|py|typescript|ts)?\n(.*?)```", text, re.S | re.I)
     return (m.group(1) if m else text).strip() + "\n"
