@@ -1,6 +1,8 @@
 """Tests for multi-language code generation (mimic.codegen + cli helpers)."""
 import os
 
+import pytest
+
 from mimic import cli, codegen
 
 RUNTIME = "mimic-runtime.ts"
@@ -37,6 +39,18 @@ def test_strip_fences_ts_capitalized():
     # AI generators sometimes capitalize the fence tag.
     fenced = "```TypeScript\nexport class Foo extends MimicClient {}\n```"
     assert codegen._strip_fences(fenced) == "export class Foo extends MimicClient {}\n"
+
+
+def test_strip_fences_crlf():
+    # A generator emitting Windows line endings must still get its fences stripped.
+    fenced = "```ts\r\nexport class Foo extends MimicClient {}\r\n```"
+    assert "```" not in codegen._strip_fences(fenced)
+    assert "export class Foo extends MimicClient {}" in codegen._strip_fences(fenced)
+
+
+def test_build_prompt_invalid_lang():
+    with pytest.raises(ValueError, match="unknown lang"):
+        codegen.build_prompt("api.example.com", ENDPOINTS, lang="ruby")
 
 
 def test_ts_runtime_template_ships():

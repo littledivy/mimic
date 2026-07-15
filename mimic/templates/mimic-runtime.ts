@@ -149,7 +149,8 @@ function sameHeaders(a: Headers, b: Headers): boolean {
 
 /** Minimal `curl 'URL' -H 'k: v' ...` parser for the paste fallback. */
 export function parseCurl(text: string): { baseUrl: string; headers: Headers } {
-  const tokens = tokenize(text.replace(/\\\n/g, " "));
+  // Collapse shell line continuations, incl. Windows CRLF (`\` + \r?\n).
+  const tokens = tokenize(text.replace(/\\\r?\n/g, " "));
   let url: string | undefined;
   const headers: Headers = {};
   for (let i = 0; i < tokens.length; i++) {

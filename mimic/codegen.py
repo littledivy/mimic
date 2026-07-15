@@ -108,7 +108,13 @@ def build_digest(endpoints):
 
 
 def build_prompt(host, endpoints, lang="python"):
-    return PROMPTS[lang].format(host=host, digest=build_digest(endpoints))
+    try:
+        template = PROMPTS[lang]
+    except KeyError:
+        raise ValueError(
+            f"unknown lang {lang!r}; expected one of {', '.join(sorted(PROMPTS))}"
+        ) from None
+    return template.format(host=host, digest=build_digest(endpoints))
 
 
 def generate(host, endpoints, model="sonnet", generator="claude", lang="python"):
@@ -156,5 +162,5 @@ def write_runtime(lang, out_dir):
 
 def _strip_fences(text):
     """AI generators sometimes wrap output in ```python / ```ts fences."""
-    m = re.search(r"```(?:python|py|typescript|ts)?\n(.*?)```", text, re.S | re.I)
+    m = re.search(r"```(?:python|py|typescript|ts)?\r?\n(.*?)```", text, re.S | re.I)
     return (m.group(1) if m else text).strip() + "\n"
