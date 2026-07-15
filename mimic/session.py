@@ -7,6 +7,9 @@ from the real app. Generated clients subclass App and call self.get/.post.
     acc = Hinge()          # auto-pulls your captured auth from mitmweb
     acc.get_recs()
 """
+import json
+import os
+
 import requests
 
 from . import extract
@@ -19,10 +22,11 @@ _IDEMPOTENT_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "PUT", "DELETE"})
 class Session:
     """Base URL + reusable headers, with helpers that return parsed JSON.
 
-    Construct one of three ways:
+    Construct one of four ways:
         Session.from_mitm("prod-api.hingeaws.net")   # pull from mitmweb
         Session(base_url=..., headers={...})         # explicit
         Session.from_curl(text)                      # paste a copied cURL
+        Session.load("session.json")                 # restore a saved session
     """
 
     def __init__(self, base_url, headers=None, host=None, mitm=None):
@@ -49,6 +53,37 @@ class Session:
     def from_curl(cls, text):
         base_url, headers = _parse_curl(text)
         return cls(base_url, headers)
+
+    # ---- persistence --------------------------------------------------------
+    def save(self, path):
+        """Persist this session's auth to a JSON file for later reuse.
+
+        Writes base_url, headers, and host so a loaded session makes the same
+        authed calls with no mitmweb running. The runtime bits (the mitm
+        backend, the requests session) are left out on purpose. The file holds
+        live tokens, so it's written 0600.
+        """
+        data = {
+            "base_url": self.base_url,
+            "headers": self.headers,
+            "host": self.host,
+            "version": 1,
+        }
+        with open(path, "w") as f:
+            json.dump(data, f, indent=2)
+        os.chmod(path, 0o600)
+
+    @classmethod
+    def load(cls, path):
+        """Restore a session written by save().
+
+        The loaded session has no mitm backend, so a 401/403 won't auto-refresh
+        (there's no proxy to pull a fresh token from); it just returns the
+        response like any other call.
+        """
+        with open(path) as f:
+            data = json.load(f)
+        return cls(data["base_url"], data.get("headers", {}), host=data.get("host"))
 
     # ---- calls --------------------------------------------------------------
     def request(self, method, path, json=None, params=None, refresh=None, **kw):

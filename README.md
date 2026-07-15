@@ -71,7 +71,7 @@ Then `from hinge_client import Hinge; Hinge().get_recommendations()`.
 
 ## The library
 
-Three ways to build a session by hand, if you don't want codegen:
+Four ways to build a session by hand, if you don't want codegen:
 
 ```python
 from mimic import Session
@@ -79,6 +79,7 @@ from mimic import Session
 Session.from_mitm("prod-api.hingeaws.net")        # pull auth from mitmweb
 Session.from_curl(open("copied.txt").read())      # paste "Copy as cURL" from devtools
 Session(base_url="https://x.com", headers={...})  # explicit
+Session.load("session.json")                      # restore a saved session
 ```
 
 `.get(path)`, `.post(path, json=...)`, and the other common HTTP verb helpers
@@ -86,6 +87,17 @@ return parsed JSON and raise `requests.HTTPError` for failed responses. If your
 token rotates, a `401` on an idempotent request triggers one re-pull from
 mitmweb and a retry. Non-idempotent requests are not retried unless you explicitly
 pass `refresh=True`.
+
+Save a captured session to disk and restore it later, no proxy needed:
+
+```python
+s = Session.from_mitm("prod-api.hingeaws.net")
+s.save("session.json")            # persist your captured auth
+s = Session.load("session.json")  # restore it later, mitmweb not required
+```
+
+A loaded session carries no mitmweb backend, so the `401`/`403` auto-refresh
+above doesn't apply to it.
 
 ## Capture backends
 
