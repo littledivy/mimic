@@ -3,11 +3,12 @@
     mimic record            start the proxy + print iPhone setup steps
     mimic hosts             list captured hosts (pick your API host here)
     mimic learn <host>      show the endpoints mimic saw for a host
-    mimic gen <host>        AI-write a Python client for a host
+    mimic gen <host>        AI-write a client for a host (--lang python|ts)
     mimic unpin <ipa|id>    defeat cert pinning (Frida) so capture works
     mimic doctor            check your setup
 """
 import argparse
+import os
 import re
 import shutil
 import socket
@@ -168,29 +169,44 @@ def cmd_gen(args):
         sys.exit(f"no requests to {args.host} found")
 
     if args.prompt_only:
-        print(codegen.build_prompt(args.host, eps))
+        print(codegen.build_prompt(args.host, eps, lang=args.lang))
         return
 
-    out = args.out or _default_out(args.host)
-    print(f"asking {args.generator} to write a client from {len(eps)} endpoints…", file=sys.stderr)
-    source = codegen.generate(args.host, eps, model=args.model, generator=args.generator)
+    out = args.out or _default_out(args.host, args.lang)
+    print(f"asking {args.generator} to write a {args.lang} client from {len(eps)} endpoints…", file=sys.stderr)
+    source = codegen.generate(args.host, eps, model=args.model, generator=args.generator, lang=args.lang)
     with open(out, "w") as f:
         f.write(source)
+    runtime = codegen.write_runtime(args.lang, os.path.dirname(out))
     cls = _class_name(source)
     print(f"\nwrote {out}")
-    print(f"\n    from {out[:-3]} import {cls or 'Client'}")
-    print(f"    acc = {cls or 'Client'}()")
-    print("    # then call the generated methods\n")
+    if runtime:
+        print(f"wrote {runtime}  (runtime — commit it alongside the client)")
+    _print_usage(out, cls, args.lang)
 
 
-def _default_out(host):
+def _default_out(host, lang):
     stem = re.sub(r"[^a-z0-9]+", "_", host.split(".")[0].lower()).strip("_")
-    return f"{stem or 'app'}_client.py"
+    ext = "ts" if lang == "ts" else "py"
+    return f"{stem or 'app'}_client.{ext}"
 
 
 def _class_name(source):
-    m = re.search(r"class\s+(\w+)\s*\(", source)
+    m = re.search(r"(?:export\s+)?class\s+(\w+)\s*(?:\(|extends\b)", source)
     return m.group(1) if m else None
+
+
+def _print_usage(out, cls, lang):
+    cls = cls or "Client"
+    if lang == "ts":
+        module = os.path.basename(out)[:-3]  # drop ".ts"
+        print(f"\n    import {{ {cls} }} from \"./{module}\";")
+        print(f"    const acc = {cls}.fromCurl(pastedCurl);  // or new {cls}({{ baseUrl, headers }})")
+        print("    // then await the generated methods   (npm i axios zod)\n")
+    else:
+        print(f"\n    from {os.path.basename(out)[:-3]} import {cls}")
+        print(f"    acc = {cls}()")
+        print("    # then call the generated methods\n")
 
 
 def main(argv=None):
@@ -211,7 +227,9 @@ def main(argv=None):
 
     gp = sub.add_parser("gen", help="AI-generate a client for a host")
     gp.add_argument("host")
-    gp.add_argument("-o", "--out", help="output .py path")
+    gp.add_argument("--lang", default="python", choices=["python", "ts"],
+                    help="output language (default: python; ts = TypeScript + Zod)")
+    gp.add_argument("-o", "--out", help="output path (default: <host>_client.py|.ts)")
     gp.add_argument("--model", default="sonnet", help="model name (claude default: sonnet)")
     gp.add_argument("--generator", default="claude", choices=["claude", "opencode"],
                     help="AI generator to use (default: claude)")

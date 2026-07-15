@@ -69,6 +69,33 @@ mimic gen    prod-api.hingeaws.net    # generate hinge_client.py
 
 Then `from hinge_client import Hinge; Hinge().get_recommendations()`.
 
+## TypeScript output
+
+Prefer a typed client for a Node / React Native codebase? Add `--lang ts`:
+
+```bash
+mimic gen prod-api.hingeaws.net --lang ts    # writes hinge_client.ts + mimic_client.ts
+```
+
+The AI writes an ergonomic client on top of a small `MimicClient` runtime
+(`mimic_client.ts`, dropped next to the client — commit both), with a
+[Zod](https://zod.dev) schema per endpoint so responses are validated and fully
+typed. Same capture, same chaining, same 401 re-auth model — just Axios + Zod
+instead of `requests`.
+
+```ts
+import { Hinge } from "./hinge_client";       // npm i axios zod
+
+const acc = Hinge.fromCurl(pastedCurl);        // or new Hinge({ baseUrl, headers })
+const recs = await acc.getRecs();              // typed via z.infer
+await acc.like(subjectId);
+```
+
+Because a browser can't pull auth from mitmweb, a TS client takes its session
+explicitly — `new Client({ baseUrl, headers })` or `Client.fromCurl(...)`. For
+silent re-auth on `401`, pass a `refresh` callback that returns fresh headers
+(e.g. re-run your token exchange). See [docs/typescript.md](docs/typescript.md).
+
 ## The library
 
 Three ways to build a session by hand, if you don't want codegen:

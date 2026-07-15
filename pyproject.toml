@@ -20,3 +20,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["mimic*"]
+
+[tool.setuptools.package-data]
+mimic = ["templates/*.ts"]
