@@ -86,6 +86,10 @@ export class MimicClient {
 
     try {
       const res = await this.http.request({
+        // Extra axios config (timeout, responseType, …) first, so the fields
+        // this method owns below always win — a stray opts.method/url/data must
+        // not override the call's own method, path, or body.
+        ...rest,
         method,
         url,
         // Merge per-call headers over the session's auth headers — never replace
@@ -93,7 +97,6 @@ export class MimicClient {
         headers: { ...this.headers, ...headers },
         data: json,
         params,
-        ...rest,
       });
       return schema ? schema.parse(res.data) : (res.data as T);
     } catch (err) {
@@ -114,13 +117,13 @@ export class MimicClient {
     return this.request<T>("GET", path, opts);
   }
   post<T = unknown>(path: string, json?: unknown, opts?: CallOptions<T>) {
-    return this.request<T>("POST", path, { ...opts, json });
+    return this.request<T>("POST", path, _withJson(opts, json));
   }
   put<T = unknown>(path: string, json?: unknown, opts?: CallOptions<T>) {
-    return this.request<T>("PUT", path, { ...opts, json });
+    return this.request<T>("PUT", path, _withJson(opts, json));
   }
   patch<T = unknown>(path: string, json?: unknown, opts?: CallOptions<T>) {
-    return this.request<T>("PATCH", path, { ...opts, json });
+    return this.request<T>("PATCH", path, _withJson(opts, json));
   }
   delete<T = unknown>(path: string, opts?: CallOptions<T>) {
     return this.request<T>("DELETE", path, opts);
@@ -131,6 +134,11 @@ export class MimicClient {
   options<T = unknown>(path: string, opts?: CallOptions<T>) {
     return this.request<T>("OPTIONS", path, opts);
   }
+}
+
+/** Apply a body verb's positional `json` without clobbering an opts-supplied one. */
+function _withJson<T>(opts: CallOptions<T> | undefined, json: unknown): CallOptions<T> {
+  return json === undefined ? { ...opts } : { ...opts, json };
 }
 
 function sameHeaders(a: Headers, b: Headers): boolean {

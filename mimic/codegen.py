@@ -55,9 +55,10 @@ with their own account. Your job: turn it into a clean, typed client library.
 
 Rules:
 - Output ONE TypeScript file, nothing else. No prose, no markdown fences.
-- Import the runtime: `import {{ MimicClient, CallOptions }} from "./mimic-runtime";` \
-and `import {{ z }} from "zod";`. The runtime file ships alongside this one — do \
-NOT redefine MimicClient.
+- Import the runtime: `import {{ MimicClient }} from "./mimic-runtime";` and \
+`import {{ z }} from "zod";`. The runtime file ships alongside this one — do NOT \
+redefine MimicClient. Import `CallOptions` from it too ONLY if a method actually \
+references that type (an unused import breaks strict lint).
 - Export one class that `extends MimicClient`. Do NOT add a custom constructor \
 (the base one, taking `{{ baseUrl, headers, refresh? }}`, must stay usable). Do \
 NOT hardcode tokens or headers; the caller supplies them via \
@@ -146,9 +147,9 @@ def write_runtime(lang, out_dir):
     dest = os.path.join(out_dir or ".", name)
     if not os.path.exists(dest):
         src = os.path.join(os.path.dirname(__file__), "templates", name)
-        with open(src) as f:
+        with open(src, encoding="utf-8") as f:
             runtime = f.read()
-        with open(dest, "w") as f:
+        with open(dest, "w", encoding="utf-8") as f:
             f.write(runtime)
     return dest
 

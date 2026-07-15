@@ -198,13 +198,13 @@ def _class_name(source):
 
 def _print_usage(out, cls, lang):
     cls = cls or "Client"
+    module = os.path.splitext(os.path.basename(out))[0]  # filename without extension
     if lang == "ts":
-        module = os.path.basename(out)[:-3]  # drop ".ts"
         print(f"\n    import {{ {cls} }} from \"./{module}\";")
         print(f"    const acc = {cls}.fromCurl(pastedCurl);  // or new {cls}({{ baseUrl, headers }})")
         print("    // then await the generated methods   (npm i axios zod)\n")
     else:
-        print(f"\n    from {os.path.basename(out)[:-3]} import {cls}")
+        print(f"\n    from {module} import {cls}")
         print(f"    acc = {cls}()")
         print("    # then call the generated methods\n")
 

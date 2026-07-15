@@ -89,3 +89,12 @@ def test_class_name_python_and_ts():
     assert cli._class_name("export class Foo extends MimicClient {}\n") == "Foo"
     assert cli._class_name("export class Foo extends MimicClient{}\n") == "Foo"  # no space
     assert cli._class_name("no class here") is None
+
+
+def test_print_usage_strips_only_extension(capsys):
+    # -o with a normal extension: module = stem.
+    cli._print_usage("out/api_client.ts", "Api", "ts")
+    assert 'from "./api_client"' in capsys.readouterr().out
+    # -o without an extension must NOT chop real characters (was `[:-3]`).
+    cli._print_usage("myclient", "Api", "python")
+    assert "from myclient import Api" in capsys.readouterr().out
