@@ -2,8 +2,8 @@
 
 `mimic gen <host>` builds a digest of what mimic saw on the wire and sends it
 to an AI generator. The AI writes a real, editable client
-class -- named methods, body templates, response handling, and the multi-step
-chaining that mobile APIs often need -- on top of mimic.App.
+class — named methods, body templates, response handling, and the multi-step
+chaining that mobile APIs often need — on top of mimic.App.
 """
 import ast
 import json
@@ -95,7 +95,7 @@ their own account. Your job: turn it into a clean, ergonomic client library.
 Rules:
 - Output ONE Python file, nothing else. No prose, no markdown fences.
 - Subclass `mimic.App`. Set `HOST = "{host}"`. Auth/device headers are pulled \
-automatically by the base class -- do NOT hardcode tokens or headers.
+automatically by the base class — do NOT hardcode tokens or headers.
 - Give methods human names for what they DO (get_posts, like, send_message), \
 not the raw path. Infer intent from the path, bodies, and status codes.
 - Use self.get(path)/self.post(path, json=body). Both return parsed JSON.
@@ -131,7 +131,7 @@ def generate(host, endpoints, model="sonnet", generator="claude"):
             )
     except FileNotFoundError:
         sys.exit(
-            f"`{generator}` CLI not found -- install it, "
+            f"`{generator}` CLI not found — install it, "
             "or use `mimic gen --prompt-only`"
         )
     if proc.returncode != 0:
@@ -143,7 +143,7 @@ def generate(host, endpoints, model="sonnet", generator="claude"):
     try:
         ast.parse(source)
     except SyntaxError:
-        sys.exit("generated code did not parse as valid Python -- aborting")
+        sys.exit("generated code did not parse as valid Python — aborting")
 
     return source
 
