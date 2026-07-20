@@ -62,6 +62,18 @@ def test_from_har_no_auth(tmp_path):
         Session.from_har(str(path), "api.example.com")
 
 
+def test_body_bytes_params_fallback():
+    # HAR form bodies may use postData.params (no text); reconstruct them.
+    pd = {"mimeType": "application/x-www-form-urlencoded",
+          "params": [{"name": "user", "value": "alice"},
+                     {"name": "pw", "value": "s3cret"}]}
+    assert har._body_bytes(pd) == b"user=alice&pw=s3cret"
+    # text still takes precedence, and empty/None still yields b"".
+    assert har._body_bytes({"text": '{"a":1}'}) == b'{"a":1}'
+    assert har._body_bytes(None) == b""
+    assert har._body_bytes({}) == b""
+
+
 def test_base64_response_body():
     eps = har.endpoints(FIXTURE, "api.example.com")
     msg = [e for e in eps if e["path"] == "/v1/messages"][0]

@@ -7,7 +7,7 @@ works unchanged, with no mitmproxy or iPhone setup at all.
 """
 import base64
 import json
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 from . import mitm
 
@@ -84,10 +84,18 @@ def endpoints(path, host):
 
 
 def _body_bytes(post_data):
-    """Bytes of a HAR request postData block (always plain text)."""
+    """Bytes of a HAR request postData block (text, or url-encoded params)."""
     if not post_data:
         return b""
-    return post_data.get("text", "").encode("utf-8")
+    text = post_data.get("text")
+    if text:
+        return text.encode("utf-8")
+    params = post_data.get("params")
+    if params:
+        return urlencode(
+            [(p.get("name", ""), p.get("value", "")) for p in params]
+        ).encode("utf-8")
+    return b""
 
 
 def _content_bytes(content):
