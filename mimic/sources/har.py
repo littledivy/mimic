@@ -6,6 +6,7 @@ flow dicts so the rest of the pipeline (extract, hosts, endpoints, codegen)
 works unchanged, with no mitmproxy or iPhone setup at all.
 """
 import base64
+import binascii
 import json
 from urllib.parse import urlencode, urlparse
 
@@ -108,6 +109,6 @@ def _content_bytes(content):
     if content.get("encoding") == "base64":
         try:
             return base64.b64decode(text)
-        except ValueError:
+        except (binascii.Error, ValueError):
             return text.encode("utf-8")
     return text.encode("utf-8")

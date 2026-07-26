@@ -80,3 +80,8 @@ def test_base64_response_body():
     assert '"ok"' in msg["response_body"]  # base64 "eyJvayI6IHRydWV9" -> {"ok": true}
     assert "true" in msg["response_body"]
     assert '"to"' in msg["request_body"]  # postData decoded too
+
+
+def test_invalid_base64_response_body_falls_back_to_text():
+    content = {"text": "not valid base64!", "encoding": "base64"}
+    assert har._content_bytes(content) == b"not valid base64!"
