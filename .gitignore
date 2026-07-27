@@ -1,5 +1,6 @@
 __pycache__/
 *_client.py
+*_client.ts
 *.egg-info/
 *.pyc
 build/
