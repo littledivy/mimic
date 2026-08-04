@@ -28,6 +28,12 @@ def _entry_to_flow(index, entry):
     parsed = urlparse(req.get("url", ""))
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
     query = parsed.query
+    request_body = _body_bytes(req.get("postData"))
+    response_body = _content_bytes(resp.get("content"))
+    request_headers = [[h["name"], h["value"]] for h in req.get("headers", [])]
+    response_headers = [[h["name"], h["value"]] for h in resp.get("headers", [])]
+    _add_content_type(request_headers, (req.get("postData") or {}).get("mimeType"))
+    _add_content_type(response_headers, (resp.get("content") or {}).get("mimeType"))
     return {
         "id": f"har-{index}",
         "request": {
@@ -36,10 +42,13 @@ def _entry_to_flow(index, entry):
             "path": parsed.path + (f"?{query}" if query else ""),
             "scheme": parsed.scheme,
             "port": port,
-            "headers": [[h["name"], h["value"]] for h in req.get("headers", [])],
+            "headers": request_headers,
+            "contentLength": len(request_body),
         },
         "response": {
             "status_code": resp.get("status", 0),
+            "headers": response_headers,
+            "contentLength": len(response_body),
         },
     }
 
@@ -49,39 +58,49 @@ def hosts(path):
     return mitm.hosts(load(path))
 
 
-def endpoints(path, host):
-    """Distinct (method, path) endpoints for a host, with inline bodies.
-
-    Mirrors mitm.endpoints(), except HAR embeds the request/response bodies in
-    each entry, so there's no separate body fetch. Latest capture of each
-    endpoint wins, and bodies are decoded/truncated the same way as the mitm
-    backend so codegen sees consistent input.
-    """
+def endpoints(
+    path,
+    host,
+    *,
+    include_bodies=True,
+    include_telemetry=False,
+    max_samples=mitm.DEFAULT_MAX_SAMPLES_PER_ENDPOINT,
+):
+    """Normalize HAR entries through the same pipeline as live captures."""
     with open(path) as f:
-        har = json.load(f)
-    by_key = {}
-    for entry in har.get("log", {}).get("entries", []):
-        req = entry.get("request", {})
-        parsed = urlparse(req.get("url", ""))
-        if parsed.hostname != host:
-            continue
-        by_key[(req.get("method"), parsed.path)] = entry
-
-    out = []
-    for (method, path_only), entry in by_key.items():
-        req = entry.get("request", {})
-        resp = entry.get("response", {})
-        out.append(
-            {
-                "method": method,
-                "path": path_only,
-                "status": resp.get("status", 0),
-                "query": urlparse(req.get("url", "")).query,
-                "request_body": mitm._decode(_body_bytes(req.get("postData"))),
-                "response_body": mitm._decode(_content_bytes(resp.get("content"))),
-            }
+        archive = json.load(f)
+    flows = []
+    bodies = {}
+    for index, entry in enumerate(archive.get("log", {}).get("entries", [])):
+        flow = _entry_to_flow(index, entry)
+        flows.append(flow)
+        bodies[(flow["id"], "request")] = _body_bytes(
+            (entry.get("request") or {}).get("postData")
         )
-    return out
+        bodies[(flow["id"], "response")] = _content_bytes(
+            (entry.get("response") or {}).get("content")
+        )
+    return mitm.endpoints(
+        _Bodies(bodies),
+        flows,
+        host,
+        include_bodies=include_bodies,
+        include_telemetry=include_telemetry,
+        max_samples=max_samples,
+    )
+
+
+class _Bodies:
+    def __init__(self, bodies):
+        self.bodies = bodies
+
+    def body(self, flow_id, side):
+        return self.bodies.get((flow_id, side), b"")
+
+
+def _add_content_type(headers, mime_type):
+    if mime_type and not any(name.lower() == "content-type" for name, _ in headers):
+        headers.append(["Content-Type", mime_type])
 
 
 def _body_bytes(post_data):

@@ -8,12 +8,23 @@ from the real app. Generated clients subclass App and call self.get/.post.
     acc.get_recs()
 """
 import requests
+from urllib.parse import urljoin, urlsplit
 
 from . import extract
 from .sources.mitm import Mitm
 
 
 _IDEMPOTENT_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "PUT", "DELETE"})
+DEFAULT_TIMEOUT = 30
+DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+
+
+class ScopeViolation(ValueError):
+    """Raised before a request can escape the session's allowed origins."""
+
+
+class ResponseTooLarge(RuntimeError):
+    """Raised when a response exceeds the configured in-memory limit."""
 
 
 class Session:
@@ -26,12 +37,27 @@ class Session:
         Session.from_har("session.har")              # load a browser HAR export
     """
 
-    def __init__(self, base_url, headers=None, host=None, mitm=None):
+    def __init__(
+        self,
+        base_url,
+        headers=None,
+        host=None,
+        mitm=None,
+        *,
+        allowed_origins=None,
+        timeout=DEFAULT_TIMEOUT,
+        max_response_bytes=DEFAULT_MAX_RESPONSE_BYTES,
+    ):
         self.base_url = base_url.rstrip("/")
         self.headers = headers or {}
         self.host = host
         self._mitm = mitm  # kept for token refresh
         self._http = requests.Session()
+        self.timeout = timeout
+        self.max_response_bytes = max_response_bytes
+        origins = [self.base_url]
+        origins.extend(allowed_origins or ())
+        self.allowed_origins = frozenset(_origin(value) for value in origins)
 
     # ---- constructors -------------------------------------------------------
     @classmethod
@@ -78,10 +104,23 @@ class Session:
         to explicitly allow one retry for a non-idempotent method such as POST.
         """
         method = method.upper()
-        url = path if path.startswith("http") else f"{self.base_url}{path}"
+        url = self.resolve_url(path)
+        timeout = kw.pop("timeout", self.timeout)
+        if kw.pop("stream", False):
+            raise ValueError("Session returns parsed bodies and does not expose streams")
+        headers = dict(self.headers)
+        headers.update(kw.pop("headers", {}) or {})
         r = self._http.request(
-            method, url, headers=self.headers, json=json, params=params, **kw
+            method,
+            url,
+            headers=headers,
+            json=json,
+            params=params,
+            timeout=timeout,
+            stream=True,
+            **kw,
         )
+        _read_bounded(r, self.max_response_bytes)
         should_refresh = refresh is True or (
             refresh is None and method in _IDEMPOTENT_METHODS
         )
@@ -97,6 +136,24 @@ class Session:
                 )
         r.raise_for_status()
         return _parse(r)
+
+    def resolve_url(self, path):
+        """Resolve a request target and reject origins outside this session's scope."""
+        if not isinstance(path, str) or not path:
+            raise ScopeViolation("request path must be a non-empty string")
+        url = urljoin(self.base_url + "/", path)
+        target = urlsplit(url)
+        if target.username is not None or target.password is not None:
+            raise ScopeViolation("request URLs may not contain credentials")
+        if target.fragment:
+            raise ScopeViolation("request URLs may not contain fragments")
+        origin = _origin(url)
+        if origin not in self.allowed_origins:
+            allowed = ", ".join(sorted(self.allowed_origins))
+            raise ScopeViolation(
+                f"request origin {origin!r} is outside session scope ({allowed})"
+            )
+        return url
 
     def get(self, path, **kw):
         return self.request("GET", path, **kw)
@@ -144,6 +201,51 @@ def _parse(r):
         return r.json()
     except ValueError:
         return r.text
+
+
+def _origin(url):
+    """Canonical HTTP(S) origin used for exact request-scope comparisons."""
+    parts = urlsplit(str(url))
+    scheme = parts.scheme.lower()
+    if scheme not in {"http", "https"} or not parts.hostname:
+        raise ScopeViolation(f"invalid HTTP(S) origin: {url!r}")
+    try:
+        port = parts.port
+    except ValueError as error:
+        raise ScopeViolation(f"invalid origin port: {url!r}") from error
+    default = 443 if scheme == "https" else 80
+    host = parts.hostname.lower()
+    if ":" in host:
+        host = f"[{host}]"
+    return f"{scheme}://{host}" + (f":{port}" if port and port != default else "")
+
+
+def _read_bounded(response, limit):
+    """Materialize a streamed response without allowing unbounded agent output."""
+    if limit is None:
+        response._content = b"".join(response.iter_content(chunk_size=64 * 1024))
+        response._content_consumed = True
+        return
+    if limit < 1:
+        response.close()
+        raise ValueError("max_response_bytes must be positive or None")
+    try:
+        declared = int(response.headers.get("content-length", ""))
+    except (TypeError, ValueError):
+        declared = None
+    if declared is not None and declared > limit:
+        response.close()
+        raise ResponseTooLarge(
+            f"response Content-Length {declared} exceeds {limit} byte limit"
+        )
+    body = bytearray()
+    for chunk in response.iter_content(chunk_size=64 * 1024):
+        body.extend(chunk)
+        if len(body) > limit:
+            response.close()
+            raise ResponseTooLarge(f"response exceeds {limit} byte limit")
+    response._content = bytes(body)
+    response._content_consumed = True
 
 
 def _parse_curl(text):
