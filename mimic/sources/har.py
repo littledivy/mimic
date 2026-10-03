@@ -2,15 +2,20 @@
 
 HAR is the standard export from browser devtools (Chrome, Firefox, Safari) and
 desktop proxies (Charles, Proxyman). This module turns HAR entries into mimic's
-flow dicts so the rest of the pipeline (extract, hosts, endpoints, codegen)
+flow dicts so the rest of the pipeline — extract, hosts, endpoints, codegen —
 works unchanged, with no mitmproxy or iPhone setup at all.
+
+HAR entries carry their bodies inline, so a HAR load is already a full capture:
+unlike the mitmweb backend it needs no second request to read them. All the
+shared behaviour lives in `mimic.sources`; this module only converts.
 """
 import base64
 import binascii
 import json
 from urllib.parse import urlencode, urlparse
 
-from . import mitm
+from . import endpoints as _endpoints
+from . import hosts as _hosts
 
 
 def load(path):
@@ -37,51 +42,24 @@ def _entry_to_flow(index, entry):
             "scheme": parsed.scheme,
             "port": port,
             "headers": [[h["name"], h["value"]] for h in req.get("headers", [])],
+            "content": _body_bytes(req.get("postData")),
         },
         "response": {
             "status_code": resp.get("status", 0),
+            "headers": [[h["name"], h["value"]] for h in resp.get("headers", [])],
+            "content": _content_bytes(resp.get("content")),
         },
     }
 
 
 def hosts(path):
     """Count requests per host in a HAR file, most frequent first."""
-    return mitm.hosts(load(path))
+    return _hosts(load(path))
 
 
 def endpoints(path, host):
-    """Distinct (method, path) endpoints for a host, with inline bodies.
-
-    Mirrors mitm.endpoints(), except HAR embeds the request/response bodies in
-    each entry, so there's no separate body fetch. Latest capture of each
-    endpoint wins, and bodies are decoded/truncated the same way as the mitm
-    backend so codegen sees consistent input.
-    """
-    with open(path) as f:
-        har = json.load(f)
-    by_key = {}
-    for entry in har.get("log", {}).get("entries", []):
-        req = entry.get("request", {})
-        parsed = urlparse(req.get("url", ""))
-        if parsed.hostname != host:
-            continue
-        by_key[(req.get("method"), parsed.path)] = entry
-
-    out = []
-    for (method, path_only), entry in by_key.items():
-        req = entry.get("request", {})
-        resp = entry.get("response", {})
-        out.append(
-            {
-                "method": method,
-                "path": path_only,
-                "status": resp.get("status", 0),
-                "query": urlparse(req.get("url", "")).query,
-                "request_body": mitm._decode(_body_bytes(req.get("postData"))),
-                "response_body": mitm._decode(_content_bytes(resp.get("content"))),
-            }
-        )
-    return out
+    """Distinct endpoints for a host, read from a HAR file."""
+    return _endpoints(load(path), host)
 
 
 def _body_bytes(post_data):

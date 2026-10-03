@@ -9,7 +9,24 @@ authors = [{ name = "Divy Srivastava", email = "me@littledivy.com" }]
 dependencies = ["requests>=2.28"]
 
 [project.optional-dependencies]
-capture = ["mitmproxy>=10"]
+# Request/response bodies for `mimic learn` / `mimic gen`, read from mitmweb's
+# `/flows/dump`. The marker matters: mitmproxy needs Python >= 3.12, so on an
+# older interpreter this extra installs nothing rather than failing to resolve.
+# install.sh uses `uv tool install`, which picks a new enough Python anyway.
+capture = ["mitmproxy>=10; python_version >= '3.12'"]
+# Fingerprint-preserving replay. Opt-in: the default transport is `requests`,
+# which needs no extra. Note curl-impersonate can only toggle a fixed set of TLS
+# extensions, so a captured JA3 is usually rejected — `impersonate=` is the
+# profile-based route that works today. See README "Fingerprints".
+fingerprint = ["curl_cffi>=0.6"]
+# Encrypted profile storage (`mimic profile save`). Opt-in: every other command
+# and the whole library work without it. `import mimic.vault` succeeds even when
+# it is absent — only opening a vault asks for it. See README "Profiles".
+vault = ["cryptography>=41"]
+# DPoP proof signing. Same dependency as the vault — one package, two names, so
+# `pip install 'mimic-client[dpop,vault]'` reads as what it is rather than
+# making someone work out why a signing feature needs a storage one.
+dpop = ["cryptography>=41"]
 
 [project.scripts]
 mimic = "mimic.cli:main"
