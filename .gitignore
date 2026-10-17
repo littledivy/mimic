@@ -4,3 +4,7 @@ __pycache__/
 *.pyc
 build/
 dist/
+
+# macOS system files
+.DS_Store
+.\worktrees/
