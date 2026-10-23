@@ -6,6 +6,7 @@ class — named methods, body templates, response handling, and the multi-step
 chaining that mobile APIs often need — on top of mimic.App.
 """
 import re
+import shutil
 import subprocess
 import sys
 
@@ -60,15 +61,18 @@ def build_prompt(host, endpoints):
 def generate(host, endpoints, model="sonnet", generator="claude"):
     """Run the AI generator on the prompt and return the generated Python source."""
     prompt = build_prompt(host, endpoints)
+    # npm installs these CLIs as .cmd/.ps1 shims on Windows, which CreateProcess
+    # won't find by bare name, so resolve to a full path first.
+    exe = shutil.which(generator) or generator
     try:
         if generator == "opencode":
             proc = subprocess.run(
-                ["opencode", "run", prompt],
+                [exe, "run", prompt],
                 capture_output=True, text=True, timeout=300,
             )
         else:
             proc = subprocess.run(
-                ["claude", "-p", "--model", model],
+                [exe, "-p", "--model", model],
                 input=prompt, capture_output=True, text=True, timeout=300,
             )
     except FileNotFoundError:
@@ -77,7 +81,12 @@ def generate(host, endpoints, model="sonnet", generator="claude"):
             "or use `mimic gen --prompt-only`"
         )
     if proc.returncode != 0:
-        sys.exit(f"{generator} failed:\n{proc.stderr}")
+        # Claude Code prints failures like "Not logged in" on stdout, so falling
+        # back to it keeps the real reason from being reported as a bare colon.
+        detail = (proc.stderr or "").strip() or (proc.stdout or "").strip()
+        if not detail:
+            detail = f"exit status {proc.returncode}"
+        sys.exit(f"{generator} failed:\n{detail}")
     return _strip_fences(proc.stdout)
 
 
