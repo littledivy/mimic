@@ -131,12 +131,13 @@ class App(Session):
 
     HOST = None
 
-    def __init__(self, **kw):
-        if not kw and self.HOST:
+    def __init__(self, *args, **kw):
+        # Positional args come from the Session.from_* constructors (cls(...)).
+        if not args and not kw and self.HOST:
             got = Session.from_mitm(self.HOST)
             super().__init__(got.base_url, got.headers, host=got.host, mitm=got._mitm)
         else:
-            super().__init__(**kw)
+            super().__init__(*args, **kw)
 
 
 def _parse(r):
